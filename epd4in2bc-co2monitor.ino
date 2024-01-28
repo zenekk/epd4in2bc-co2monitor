@@ -11,6 +11,9 @@
 SCD4x SCD41;
 
 
+int lastCO2;
+int loopIterator;
+
 
 
 void PaintText(char *text)
@@ -51,7 +54,7 @@ printf("EPD_4IN2BC_test Demo\r\n");
   DEV_Delay_ms(2000);
 #endif
 
-#if 0   // Drawing on the image
+#if 1   // Drawing on the image
   /*Horizontal screen*/
   //1.Draw black image
   printf("Draw black image\r\n");
@@ -66,7 +69,7 @@ printf("EPD_4IN2BC_test Demo\r\n");
   Paint_DrawRectangle(20, 70, 70, 120, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
   Paint_DrawRectangle(80, 70, 130, 120, BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
   //Paint_DrawString_EN(10, 0, "waveshare", &Font16, BLACK, WHITE);
-  Paint_DrawString_EN(10, 0, "waveshare", &Font16, BLACK, WHITE);
+  Paint_DrawString_EN(10, 0, text, &Font16, BLACK, WHITE);
   Paint_DrawString_CN(130, 20, "微雪电子", &Font24CN, WHITE, BLACK);
   Paint_DrawNum(10, 50, 987654321, &Font16, WHITE, BLACK);
 
@@ -131,15 +134,30 @@ if (SCD41.begin(false, true) == false)
   if (SCD41.startLowPowerPeriodicMeasurement() == true)  {
     Serial.println("Low power mode enabled.");
   }
-  
+
+
+    Serial.println("Starting to do the Setup painting.");
+
+
+    delay(1000);
+
+
+  PaintText("Setup");
  
 }
 
 /* The main loop -------------------------------------------------------------*/
 void loop()
 {
+
+int co2;
+  co2= 42;
+  char textBuffer [100];
   //
-Serial.print("Loop start");
+Serial.print("xxxxxxxxxxxxxxxxxx\n\n\n\n\n\n\n\nLoop start: ");
+Serial.print(loopIterator);
+Serial.print("\nlast co2: ");
+Serial.print(lastCO2);
   delay(10000);
 
 
@@ -152,8 +170,11 @@ if (SCD41.readMeasurement()) // wait for a new data (approx 30s)
   {
     Serial.println();
 
+co2 = SCD41.getCO2();
+
     Serial.print("CO2(ppm):");
-    Serial.print(SCD41.getCO2());
+    Serial.print(co2, 1);
+    Serial.println("---");
 
     Serial.print("\tTemperature(C):");
     Serial.print(SCD41.getTemperature(), 1);
@@ -163,6 +184,15 @@ if (SCD41.readMeasurement()) // wait for a new data (approx 30s)
 
     Serial.println();
   }
+
+Serial.println("Paiting text");
+sprintf(textBuffer, "xxx CO2(ppm): %d xxx", co2);
+Serial.println(textBuffer);
+  delay(1000);
+
+  PaintText(textBuffer);
+
+  
   delay(1000);
 
 
