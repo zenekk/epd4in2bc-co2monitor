@@ -6,9 +6,15 @@
 #include "pusheen.h"
 #include <stdlib.h>
 
-#include "WiFi.h"
 #include <Wire.h>
 #include "SparkFun_SCD4x_Arduino_Library.h"
+
+#include <ArduinoJson.h>
+#include "SecretWifiPassword.h"
+#include <WiFi.h>
+#include <WiFiMulti.h>
+#include <HttpClient.h>
+
 SCD4x SCD41;
 
 
@@ -16,8 +22,20 @@ int lastCO2;
 int loopIterator;
 
 
+WiFiMulti WiFiMulti;
 
-void PaintText(char *row1, char *row2, char *row3, char *row4)
+const char kHostname[] = "worldtimeapi.org";
+const char kPath[] = "/api/timezone/Europe/Prague";
+
+
+// Number of milliseconds to wait without receiving any data before we give up
+const int kNetworkTimeout = 30*1000;
+// Number of milliseconds to wait if no data is available before trying again
+const int kNetworkDelay = 1000;
+
+
+
+void PaintText(char *row1, char *row2, char *row3, char *row4, char *row5, PAINT_TIME *pTime)
 {
 
 printf("EPD_4IN2BC_test Demo\r\n");
@@ -82,6 +100,8 @@ Paint_DrawBitMap(PICTURE);
   Paint_DrawString_EN(10, 20, row2, &Font16, WHITE, BLACK);  
   Paint_DrawString_EN(10, 40, row3, &Font16, WHITE, BLACK);  
   Paint_DrawString_EN(10, 60, row4, &Font16, WHITE, BLACK);  
+  Paint_DrawString_EN(10, 80, row5, &Font16, WHITE, BLACK);  
+  Paint_DrawTime(200, 80, pTime, &Font16, WHITE, BLACK);
   
   
   //Paint_DrawString_CN(130, 20, "微雪电子", &Font24CN, WHITE, BLACK);
@@ -219,11 +239,22 @@ void setup()
 {
     Serial.begin(115200);
     Wire.begin();
-    // Set WiFi to station mode and disconnect from an AP if it was previously connected.
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
+
+    WiFiMulti.addAP(WIFIAP, WIFIPASS);
+ Serial.print("Waiting for WiFi... ");
+
+    while(WiFiMulti.run() != WL_CONNECTED) {
+        Serial.print(".");
+        delay(500);
+    }
     delay(100);
 
+    Serial.println("");
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+
+    delay(500);
     Serial.println("Setup done");
 
 if (SCD41.begin(false, true) == false)
@@ -258,6 +289,11 @@ float humidity;
 
   co2= 42;
   char textBuffers [40][100];
+   char datetime[100];
+
+PAINT_TIME pTime;
+
+   
   int numTexts =0;
   //
 Serial.print("xxxxxxxxxxxxxxxxxx\n\n\n\n\n\n\n\nLoop start: ");
@@ -265,6 +301,132 @@ Serial.print(loopIterator);
 Serial.print("\nlast co2: ");
 Serial.print(lastCO2);
   delay(10000);
+
+
+
+
+ Serial.print("Connecting to ");
+    Serial.println(kHostname);
+
+    // Use WiFiClient class to create TCP connections
+    WiFiClient mClient;
+    HttpClient http(mClient);
+  int err =0;
+
+
+
+err = http.get(kHostname, kPath);
+  if (err == 0)
+  {
+    Serial.println("startedRequest ok");
+
+    err = http.responseStatusCode();
+    if (err >= 0)
+    {
+      Serial.print("Got status code: ");
+      Serial.println(err);
+if(err == 200)
+{
+      // Usually you'd check that the response code is 200 or a
+      // similar "success" code (200-299) before carrying on,
+      // but we'll print out whatever response we get
+
+      err = http.skipResponseHeaders();
+      if (err >= 0)
+      {
+        int bodyLen = http.contentLength();
+        Serial.print("Content length is: ");
+        Serial.println(bodyLen);
+        Serial.println();
+        Serial.println("Body returned follows:");
+      
+        // Now we've got to the body, so we can print it out
+        unsigned long timeoutStart = millis();
+        char c;
+
+
+ // Allocate the JSON document
+  JsonDocument doc;
+
+  // Parse JSON object
+  DeserializationError error = deserializeJson(doc, mClient);
+  if (error) {
+    Serial.print(F("deserializeJson() failed: "));
+    Serial.println(error.f_str());
+    mClient.stop();
+    return;
+  }
+
+  // Extract values
+  Serial.println(F("Response:"));
+ // Serial.println(doc["sensor"].as<const char*>());
+ // Serial.println(doc["time"].as<long>());
+ // Serial.println(doc["data"][0].as<float>(), 6);
+  Serial.println(doc["datetime"].as<const char*>());
+ String datetimeStr;
+ datetimeStr = doc["datetime"].as<String>();
+
+ 
+  //strcpy(datetime, doc["datetime"].as<const char*>());
+
+ String tempStr;
+ tempStr = datetimeStr.substring(datetimeStr.indexOf("T")+1); //time (from hours till the end of string)
+pTime.Hour = tempStr.substring(0, tempStr.indexOf(":")).toInt();
+tempStr = tempStr.substring(tempStr.indexOf(":")+1); //time string from minutes (first colon) until the end
+pTime.Min = tempStr.substring(0, datetimeStr.indexOf(":")).toInt(); //minutes, i.e. until the next colon
+tempStr = tempStr.substring(tempStr.indexOf(":")+1, tempStr.indexOf(".")); //time string from seconds(seconds colon) until period (dot), i.e. this is seconds
+pTime.Sec = tempStr.toInt();
+
+ Serial.println(datetimeStr.indexOf("T"));
+ Serial.println(datetimeStr.substring(0, datetimeStr.indexOf("T")));
+datetimeStr = datetimeStr.substring(0, datetimeStr.indexOf("T"));
+ Serial.println(datetimeStr);
+  
+  strcpy(datetime, datetimeStr.c_str());
+  Serial.println(datetime);
+      }
+        
+      
+      else
+      {
+        Serial.print("Failed to skip response headers: ");
+        Serial.println(err);
+      }
+      
+      
+      }
+      else
+      {
+        Serial.print("Response not 200: ");
+        Serial.println(err);
+      }
+    }
+    else
+    {    
+      Serial.print("Getting response failed: ");
+      Serial.println(err);
+    }
+  }
+  else
+  {
+    Serial.print("Connect failed: ");
+    Serial.println(err);
+  }
+  http.stop();
+
+
+  
+
+    Serial.println("Closing connection.");
+    mClient.stop();
+
+    Serial.println("Waiting 5 seconds before restarting...");
+    delay(5000);
+
+
+
+
+    
 
 
 // https://randomnerdtutorials.com/esp32-i2c-communication-arduino-ide/
@@ -299,6 +461,8 @@ sprintf(textBuffers[numTexts], "T:   %.1f C", temp); numTexts++;
 sprintf(textBuffers[numTexts], "H:   %.1f %%", humidity); numTexts++;
 sprintf(textBuffers[numTexts], "CO2: %d ppm, last CO2: %d ppm", co2, lastCO2); numTexts++;
 sprintf(textBuffers[numTexts], "Iteration: %d", loopIterator); numTexts++;
+sprintf(textBuffers[numTexts], "Time: %s", datetime); numTexts++;
+
 
 
 for(int i=0;i<numTexts;i++)
@@ -313,7 +477,7 @@ if(co2 !=lastCO2)
   Serial.println("CO2 different. Painting.");
     delay(1000);
 
-  PaintText(textBuffers[0], textBuffers[1], textBuffers[2], textBuffers[3]);
+  PaintText(textBuffers[0], textBuffers[1], textBuffers[2], textBuffers[3], textBuffers[4], &pTime);
 Serial.println("Paiting done. Waiting 5 min");
   delay(5*60*1000);
 }
